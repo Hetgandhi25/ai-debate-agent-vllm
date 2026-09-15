@@ -10,6 +10,68 @@ AI Debate Agent is a multi-agent application that runs structured debates betwee
 
 ![Demo](assets/demo.png)
 
+## Architecture
+
+### High-Level AI Debate Architecture
+
+```mermaid
+graph TD
+    UI[Gradio Web UI] <-->|Stream / Updates| LG[LangGraph Orchestrator]
+    LG -->|State: Topic, Transcript| NodeA[Debater A Node]
+    LG -->|State: Topic, Transcript| NodeB[Debater B Node]
+    LG -->|State: Full Transcript| Judge[Judge Node]
+    NodeA <-->|OpenAI API| vLLM[(vLLM Server: Qwen3.8-27B)]
+    NodeB <-->|OpenAI API| vLLM
+    Judge <-->|OpenAI API| vLLM
+```
+
+### Agentic Workflow Diagram
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant UI as Gradio Interface
+    participant Orchestrator as LangGraph
+    participant AgentA as Debater A (For)
+    participant AgentB as Debater B (Against)
+    participant Judge as Impartial Judge
+    participant Model as vLLM Endpoint
+
+    User->>UI: Submits Topic & Rounds
+    UI->>Orchestrator: Initialize DebateState
+    loop For Each Round
+        Orchestrator->>AgentA: Trigger Turn
+        AgentA->>Model: Prompt (Position + Transcript)
+        Model-->>AgentA: Stream Argument
+        AgentA-->>Orchestrator: Update Transcript
+        Orchestrator->>AgentB: Trigger Turn
+        AgentB->>Model: Prompt (Position + Transcript)
+        Model-->>AgentB: Stream Argument
+        AgentB-->>Orchestrator: Update Transcript
+    end
+    Orchestrator->>Judge: Trigger Evaluation
+    Judge->>Model: Prompt (Full Transcript)
+    Model-->>Judge: Stream Verdict & Scores (JSON)
+    Judge-->>Orchestrator: Update Verdict State
+    Orchestrator-->>UI: Final Render
+    UI-->>User: Display Winner
+```
+
+### Agentic RAG Workflow (Future Extension)
+
+```mermaid
+graph TD
+    subgraph Agentic RAG Pipeline
+        UserQuery[Topic Input] --> Router[Agent Router]
+        Router -->|Needs Evidence| Retriever[Vector DB / Document Retriever]
+        Retriever -->|Contextual Data| Generator[LLM Debater]
+        Router -->|Direct Generation| Generator
+        Generator --> Evaluator[Self-Correction / Fact-Checker]
+        Evaluator -->|Hallucination / Weak Logic| Retriever
+        Evaluator -->|Approved Argument| FinalOutput[Final Output to Transcript]
+    end
+```
+
 ## Features
 
 - **Dual debaters** with fixed roles: Debater A (For) and Debater B (Against)
