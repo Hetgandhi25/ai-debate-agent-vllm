@@ -6,10 +6,6 @@
 
 AI Debate Agent is a multi-agent application that runs structured debates between two language models and an impartial judge. You supply a topic and round count (1 to 5); Debater A argues for, Debater B argues against, and they alternate while responding to each other's latest points. When rounds finish, a judge reviews the full transcript, scores each argument on logic, evidence, and persuasiveness, and returns a winner with a written verdict. The Gradio interface streams the transcript live as each agent speaks.
 
-## Demo
-
-![Demo](assets/demo.png)
-
 ## Architecture
 
 ### High-Level AI Debate Architecture
