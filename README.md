@@ -110,8 +110,8 @@ graph TD
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/Sumanth077/Hands-On-AI-Engineering.git
-cd Hands-On-AI-Engineering/ai_agents/ai_debate_agent
+git clone https://github.com/Hetgandhi25/ai-debate-agent-vllm.git
+cd ai-debate-agent-vllm
 ```
 
 ### 2. Create Virtual Environment (Recommended)
