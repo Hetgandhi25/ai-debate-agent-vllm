@@ -21,6 +21,8 @@ from debate import (
 )
 import storage
 
+MAX_HISTORY_BTNS = 20
+
 
 def _render_transcript(transcript: list[dict]) -> str:
     """Format the running transcript as markdown."""
@@ -90,36 +92,36 @@ def _render_verdict(verdict: dict | str) -> str:
     return "\n".join(lines)
 
 
-def get_history_choices() -> list[tuple[str, str]]:
-    """Fetch formatted options for the history dropdown."""
+def get_history_button_updates():
+    """Fetch history and return updates for the fixed pool of sidebar buttons."""
     sessions = storage.load_sessions()
-    choices = []
-    for s in sessions:
-        topic_preview = s['topic'][:40] + ("..." if len(s['topic']) > 40 else "")
-        label = f"{s['timestamp']} - {topic_preview}"
-        choices.append((label, s['id']))
-    return choices
+    updates = []
+    for i in range(MAX_HISTORY_BTNS):
+        if i < len(sessions):
+            s = sessions[i]
+            title = s["topic"]
+            if len(title) > 35:
+                title = title[:35] + "..."
+            updates.append(gr.update(visible=True, value=title))
+        else:
+            updates.append(gr.update(visible=False, value=""))
+    return updates
 
 
-def load_debate_callback(session_id: str):
-    """Callback when a user selects a past debate to load."""
-    if not session_id:
-        return gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
-    
+def load_debate_by_index(idx: int):
+    """Callback when a user clicks a specific history button."""
     sessions = storage.load_sessions()
-    session = next((s for s in sessions if s["id"] == session_id), None)
-    
-    if not session:
-        return gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
-        
-    status = f"✅ Loaded past debate from {session['timestamp']}."
-    return (
-        session["topic"],
-        session["rounds"],
-        status,
-        _render_transcript(session["transcript"]),
-        _render_verdict(session["verdict"])
-    )
+    if idx < len(sessions):
+        session = sessions[idx]
+        status = f"✅ Loaded past debate from {session['timestamp']}."
+        return (
+            session["topic"],
+            session["rounds"],
+            status,
+            _render_transcript(session["transcript"]),
+            _render_verdict(session["verdict"])
+        )
+    return gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
 
 
 def clear_debate_callback():
@@ -129,18 +131,19 @@ def clear_debate_callback():
         3,
         "_Ready when you are._",
         "_The debate will appear here…_",
-        "_Awaiting the judge's verdict…_",
-        None
+        "_Awaiting the judge's verdict…_"
     )
 
 
 def debate_handler(topic: str, rounds: int):
     """Gradio streaming callback using a queue to stream token-by-token."""
+    empty_history = [gr.update() for _ in range(MAX_HISTORY_BTNS)]
+    
     if not (topic or "").strip():
-        yield "⚠️ Please enter a debate topic.", "", "", gr.update()
+        yield tuple(["⚠️ Please enter a debate topic.", "", ""] + empty_history)
         return
 
-    yield "🚀 Starting debate…", "_The debate will appear here…_", "", gr.update()
+    yield tuple(["🚀 Starting debate…", "_The debate will appear here…_", ""] + empty_history)
 
     q = Queue()
 
@@ -163,11 +166,11 @@ def debate_handler(topic: str, rounds: int):
         if msg_type == "chunk":
             temp_transcript = transcript + [data]
             status = f"🗣️ Round {data['round']}: {data['speaker']} ({data['position']}) is arguing…"
-            yield status, _render_transcript(temp_transcript), _render_verdict(verdict), gr.update()
+            yield tuple([status, _render_transcript(temp_transcript), _render_verdict(verdict)] + empty_history)
 
         elif msg_type == "judge_chunk":
             status = "⚖️ Judge is evaluating the arguments…"
-            yield status, _render_transcript(transcript), _render_verdict(data), gr.update()
+            yield tuple([status, _render_transcript(transcript), _render_verdict(data)] + empty_history)
 
         elif msg_type == "state_full":
             state = data
@@ -180,15 +183,15 @@ def debate_handler(topic: str, rounds: int):
                 status = "✅ Debate complete - verdict delivered."
                 # Save session to history only when complete
                 storage.save_session(topic, rounds, transcript, verdict)
-                choices = get_history_choices()
-                yield status, _render_transcript(transcript), _render_verdict(verdict), gr.update(choices=choices)
+                btn_updates = get_history_button_updates()
+                yield tuple([status, _render_transcript(transcript), _render_verdict(verdict)] + btn_updates)
             elif transcript:
                 latest = transcript[-1]
                 status = f"🗣️ Round {latest['round']}: {latest['speaker']} ({latest['position']}) just argued…"
-                yield status, _render_transcript(transcript), _render_verdict(verdict), gr.update()
+                yield tuple([status, _render_transcript(transcript), _render_verdict(verdict)] + empty_history)
             else:
                 status = "🚀 Starting debate…"
-                yield status, _render_transcript(transcript), _render_verdict(verdict), gr.update()
+                yield tuple([status, _render_transcript(transcript), _render_verdict(verdict)] + empty_history)
 
         elif msg_type == "error":
             exc = data
@@ -205,7 +208,7 @@ def debate_handler(topic: str, rounds: int):
                 cause = exc.__cause__
                 if cause and str(cause) not in detail:
                     detail = f"{detail} - {cause}"
-            yield f"❌ Error: {detail}", _render_transcript(transcript), _render_verdict(verdict), gr.update()
+            yield tuple([f"❌ Error: {detail}", _render_transcript(transcript), _render_verdict(verdict)] + empty_history)
             break
 
         elif msg_type == "done":
@@ -214,17 +217,34 @@ def debate_handler(topic: str, rounds: int):
 
 def build_ui() -> gr.Blocks:
     """Build and return the Gradio Blocks interface for the debate app."""
-    with gr.Blocks(title="AI Debate Agent") as demo:
+    css = """
+    .chat-history-btn { 
+        text-align: left !important; 
+        justify-content: flex-start !important; 
+        overflow: hidden !important; 
+        text-overflow: ellipsis !important; 
+        white-space: nowrap !important;
+        margin-bottom: 5px !important;
+        background: transparent !important;
+        border: 1px solid #333 !important;
+    }
+    .chat-history-btn:hover {
+        background: #2a2a2a !important;
+    }
+    """
+    
+    with gr.Blocks(title="AI Debate Agent", css=css) as demo:
         with gr.Row():
-            # LEFT SIDEBAR - HISTORY
+            # LEFT SIDEBAR - HISTORY (ChatGPT Style)
             with gr.Column(scale=1, variant="panel"):
-                gr.Markdown("### 🗄️ Debate History")
                 new_btn = gr.Button("+ New Debate", variant="primary")
-                history_dd = gr.Dropdown(
-                    choices=get_history_choices(),
-                    label="Load Past Debate",
-                    interactive=True
-                )
+                gr.Markdown("### 🗄️ Recent Debates")
+                
+                # Pool of buttons to mimic a chat history list
+                history_buttons = []
+                for i in range(MAX_HISTORY_BTNS):
+                    btn = gr.Button("", visible=False, elem_classes="chat-history-btn")
+                    history_buttons.append(btn)
 
             # MAIN CONTENT AREA
             with gr.Column(scale=3):
@@ -273,33 +293,36 @@ def build_ui() -> gr.Blocks:
         run_btn.click(
             fn=debate_handler,
             inputs=[topic, rounds],
-            outputs=[status, transcript_out, verdict_out, history_dd],
+            outputs=[status, transcript_out, verdict_out] + history_buttons,
         )
         topic.submit(
             fn=debate_handler,
             inputs=[topic, rounds],
-            outputs=[status, transcript_out, verdict_out, history_dd],
+            outputs=[status, transcript_out, verdict_out] + history_buttons,
         )
         
-        history_dd.change(
-            fn=load_debate_callback,
-            inputs=[history_dd],
-            outputs=[topic, rounds, status, transcript_out, verdict_out]
-        )
+        # History button click events
+        for i, btn in enumerate(history_buttons):
+            def make_handler(idx):
+                return lambda: load_debate_by_index(idx)
+                
+            btn.click(
+                fn=make_handler(i),
+                inputs=[],
+                outputs=[topic, rounds, status, transcript_out, verdict_out]
+            )
         
         new_btn.click(
             fn=clear_debate_callback,
             inputs=[],
-            outputs=[topic, rounds, status, transcript_out, verdict_out, history_dd]
+            outputs=[topic, rounds, status, transcript_out, verdict_out]
         )
 
-        def refresh_history_on_load():
-            return gr.update(choices=get_history_choices())
-
+        # Update history on load/refresh
         demo.load(
-            fn=refresh_history_on_load,
+            fn=get_history_button_updates,
             inputs=None,
-            outputs=[history_dd]
+            outputs=history_buttons
         )
 
     return demo
