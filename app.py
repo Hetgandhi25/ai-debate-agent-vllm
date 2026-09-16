@@ -293,6 +293,15 @@ def build_ui() -> gr.Blocks:
             outputs=[topic, rounds, status, transcript_out, verdict_out, history_dd]
         )
 
+        def refresh_history_on_load():
+            return gr.update(choices=get_history_choices())
+
+        demo.load(
+            fn=refresh_history_on_load,
+            inputs=None,
+            outputs=[history_dd]
+        )
+
     return demo
 
 
