@@ -286,19 +286,48 @@ def _parse_verdict(raw: str, transcript: List[Argument]) -> dict:
     parsed: Optional[dict] = None
     match = re.search(r"\{.*\}", raw, re.DOTALL)
     if match:
+        json_str = match.group(0)
+        # Attempt to clean up common JSON typos made by LLMs (e.g. trailing commas, extra quotes after digits)
+        json_str = re.sub(r',\s*([\]}])', r'\1', json_str)
+        json_str = re.sub(r'(:\s*\d+)"\s*(,|})', r'\1\2', json_str)
         try:
-            parsed = json.loads(match.group(0))
+            parsed = json.loads(json_str)
         except json.JSONDecodeError:
             parsed = None
 
+    # If JSON parsing still fails, do a best-effort Regex extraction
     if not isinstance(parsed, dict):
-        return {
+        parsed = {
             "arguments": [],
             "totals": {DEBATER_A: 0, DEBATER_B: 0},
             "winner": "Tie",
-            "verdict": raw.strip() or "The judge did not return a parsable verdict.",
-            "raw": raw.strip(),
+            "verdict": "",
+            "raw": raw.strip()
         }
+        
+        # Extract winner
+        w_match = re.search(r'"winner"\s*:\s*"(Debater A|Debater B|Tie)"', raw, re.IGNORECASE)
+        if w_match:
+            parsed["winner"] = w_match.group(1)
+            
+        # Extract verdict
+        v_match = re.search(r'"verdict"\s*:\s*"(.*?)"\s*\}?\s*$', raw, re.DOTALL | re.IGNORECASE)
+        if v_match:
+            parsed["verdict"] = v_match.group(1).strip()
+        else:
+            parsed["verdict"] = raw.strip()
+            
+        # Extract arguments
+        arg_pattern = r'"speaker"\s*:\s*"(Debater [AB])".*?"round"\s*:\s*(\d+).*?"logic"\s*:\s*(\d+).*?"evidence"\s*:\s*(\d+).*?"persuasiveness"\s*:\s*(\d+).*?"comment"\s*:\s*"(.*?)"'
+        for m in re.finditer(arg_pattern, raw, re.DOTALL | re.IGNORECASE):
+            parsed["arguments"].append({
+                "speaker": m.group(1),
+                "round": int(m.group(2)),
+                "logic": int(m.group(3)),
+                "evidence": int(m.group(4)),
+                "persuasiveness": int(m.group(5)),
+                "comment": m.group(6)
+            })
 
     # Recompute totals from per-argument scores when possible (more reliable than the LLM's math).
     totals = {DEBATER_A: 0, DEBATER_B: 0}
