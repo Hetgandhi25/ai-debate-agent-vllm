@@ -1,227 +1,122 @@
-# AI Debate Agent
+﻿# 🤖 AI Debate Agent (v2.0)
 
-> Two LLM debaters argue opposing sides of any topic you choose; a judge scores every turn and declares a winner.
+![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
+![Vite](https://img.shields.io/badge/Vite-B73BFE?style=for-the-badge&logo=vite&logoColor=FFD62E)
+![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
+![FastAPI](https://img.shields.io/badge/fastapi-109989?style=for-the-badge&logo=FASTAPI&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
 
-## Overview
+A multi-agent AI system where two large language models autonomously debate any topic you give them, while a third impartial AI judge evaluates their logic, evidence, and persuasiveness.
 
-AI Debate Agent is a multi-agent application that runs structured debates between two language models and an impartial judge. You supply a topic and round count (1 to 5); Debater A argues for, Debater B argues against, and they alternate while responding to each other's latest points. When rounds finish, a judge reviews the full transcript, scores each argument on logic, evidence, and persuasiveness, and returns a winner with a written verdict. The Gradio interface streams the transcript live as each agent speaks.
+Recently completely re-architected from a basic Gradio script into a **production-ready SaaS application** featuring a modern React frontend and a FastAPI backend with Real-Time Server-Sent Events (SSE) streaming.
 
-## Architecture
+---
 
-### High-Level AI Debate Architecture
+## ✨ Features
 
-```mermaid
-graph TD
-    UI[Gradio Web UI] <-->|Stream / Updates| LG[LangGraph Orchestrator]
-    LG -->|State: Topic, Transcript| NodeA[Debater A Node]
-    LG -->|State: Topic, Transcript| NodeB[Debater B Node]
-    LG -->|State: Full Transcript| Judge[Judge Node]
-    NodeA <-->|OpenAI API| vLLM[(vLLM Server: Qwen3.8-27B)]
-    NodeB <-->|OpenAI API| vLLM
-    Judge <-->|OpenAI API| vLLM
-```
+- **Multi-Agent Orchestration**: Powered by **LangGraph**, orchestrating three distinct agent personas (Debater A, Debater B, and the Judge).
+- **Real-Time SSE Streaming**: Watch the debate unfold live. FastAPI streams chunks directly from the vLLM engine to the React frontend with zero latency.
+- **Modern React + Tailwind UI**: A beautiful, responsive CSS Grid layout built with Vite, TypeScript, and Tailwind CSS.
+- **Rich Markdown Formatting**: Debate transcripts are rendered using eact-markdown and @tailwindcss/typography for flawless readability.
+- **Robust State Management**: View past debates in a locked-down 'View Only' mode, complete with hover-to-delete history management, just like modern AI products.
+- **Bring Your Own LLM**: Connects to any local or remote OpenAI-compatible endpoint (like vLLM, Ollama, or OpenAI).
+
+---
+
+## 🏗️ Architecture
+
+The system is separated into a strict Client-Server model:
+
+1. **Frontend (Vite/React)**: Manages UI state, history sidebar, and parses the SSE stream using native etch and TextDecoder.
+2. **Backend (FastAPI)**: Serves a REST API for history management and a POST endpoint that executes the LangGraph workflow, bridging synchronous generator queues to asynchronous HTTP streams.
+3. **Orchestrator (LangGraph)**: Manages the cyclical graph state (DebateState), passing the context window back and forth between the debaters before handing it to the judge.
+4. **LLM Engine (vLLM)**: Executes the actual inference for the agents.
 
 ### Agentic Workflow Diagram
 
-```mermaid
+`mermaid
 sequenceDiagram
-    participant User
-    participant UI as Gradio Interface
+    participant UI as React Frontend
+    participant API as FastAPI Backend
     participant Orchestrator as LangGraph
-    participant AgentA as Debater A (For)
-    participant AgentB as Debater B (Against)
-    participant Judge as Impartial Judge
     participant Model as vLLM Endpoint
 
-    User->>UI: Submits Topic & Rounds
-    UI->>Orchestrator: Initialize DebateState
+    UI->>API: POST /api/debate/stream {topic, rounds}
+    API->>Orchestrator: Initialize DebateState
     loop For Each Round
-        Orchestrator->>AgentA: Trigger Turn
-        AgentA->>Model: Prompt (Position + Transcript)
-        Model-->>AgentA: Stream Argument
-        AgentA-->>Orchestrator: Update Transcript
-        Orchestrator->>AgentB: Trigger Turn
-        AgentB->>Model: Prompt (Position + Transcript)
-        Model-->>AgentB: Stream Argument
-        AgentB-->>Orchestrator: Update Transcript
+        Orchestrator->>Model: Prompt (Position + Transcript)
+        Model-->>API: Stream Chunk (SSE)
+        API-->>UI: Render live text
     end
-    Orchestrator->>Judge: Trigger Evaluation
-    Judge->>Model: Prompt (Full Transcript)
-    Model-->>Judge: Stream Verdict & Scores (JSON)
-    Judge-->>Orchestrator: Update Verdict State
-    Orchestrator-->>UI: Final Render
-    UI-->>User: Display Winner
-```
+    Orchestrator->>Model: Prompt Judge (Full Transcript)
+    Model-->>API: Stream JSON Verdict
+    API-->>UI: Display Winner & Scores
+`
 
-### Agentic RAG Workflow (Future Extension)
+---
 
-```mermaid
-graph TD
-    subgraph Agentic RAG Pipeline
-        UserQuery[Topic Input] --> Router[Agent Router]
-        Router -->|Needs Evidence| Retriever[Vector DB / Document Retriever]
-        Retriever -->|Contextual Data| Generator[LLM Debater]
-        Router -->|Direct Generation| Generator
-        Generator --> Evaluator[Self-Correction / Fact-Checker]
-        Evaluator -->|Hallucination / Weak Logic| Retriever
-        Evaluator -->|Approved Argument| FinalOutput[Final Output to Transcript]
-    end
-```
+## 🚀 Getting Started
 
-## Features
+### 1. Prerequisites
+- Node.js (v18+)
+- Python (3.10+)
+- A running OpenAI-compatible API server (e.g., vLLM or Ollama).
 
-- **Dual debaters** with fixed roles: Debater A (For) and Debater B (Against)
-- **Configurable rounds** from 1 to 5, with each round consisting of one turn per debater
-- **Context-aware rebuttals** where each debater sees the full transcript before speaking
-- **Impartial judge** that scores every argument and declares a winner with reasoning
-- **Live streaming UI** that updates the transcript and status after each agent turn
-- **Configurable API** for local inference via **vLLM** (OpenAI-compatible)
-- **Optional connectivity test** (`test_vllm.py`) to verify the vLLM server before launching the app
-
-## Tech Stack
-
-**Frameworks & Libraries:**
-
-- [LangGraph](https://langchain-ai.github.io/langgraph/) for multi-agent orchestration
-- [LangChain Core](https://python.langchain.com/) for graph state typing
-- [OpenAI Python SDK](https://github.com/openai/openai-python) (vLLM-compatible client)
-- [Gradio](https://www.gradio.app/) for the web UI
-- [python-dotenv](https://github.com/theskumar/python-dotenv) for environment configuration
-
-**Additional Tools:**
-
-- **Orchestration:** LangGraph
-- **Web Framework:** Gradio
-- **Model Backend:** A vLLM server providing an OpenAI-compatible API endpoint
-
-| Agent | Role | Default model |
-|-------|------|-------------------------|
-| Debater A | For | Configurable `VLLM_MODEL` |
-| Debater B | Against | Configurable `VLLM_MODEL` |
-| Judge | Scoring and verdict | Configurable `VLLM_MODEL` |
-
-## Prerequisites
-
-- Python 3.10 or higher
-- A running vLLM server exposing an OpenAI-compatible API (e.g. `http://<VLLM_IP>:<PORT>/v1`)
-
-## Installation
-
-### 1. Clone the Repository
-
-```bash
+### 2. Backend Setup (FastAPI + LangGraph)
+\\\ash
+# Clone the repository
 git clone https://github.com/Hetgandhi25/ai-debate-agent-vllm.git
 cd ai-debate-agent-vllm
-```
 
-### 2. Create Virtual Environment (Recommended)
-
-```bash
+# Create a virtual environment
 python -m venv venv
-```
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-**Windows:**
-
-```bash
-venv\Scripts\activate
-```
-
-**macOS/Linux:**
-
-```bash
-source venv/bin/activate
-```
-
-### 3. Install Dependencies
-
-```bash
+# Install Python dependencies
 pip install -r requirements.txt
-```
 
-### 4. Set Up Environment Variables
-
-```bash
+# Configure your LLM endpoint
 cp .env.example .env
-```
+# Edit .env with your VLLM_BASE_URL, VLLM_API_KEY, and VLLM_MODEL
 
-Edit `.env` and configure your vLLM API details:
+# Start the FastAPI server
+uvicorn main:app --reload
+\\\
 
-```env
-VLLM_BASE_URL=http://<MY-VLLM-IP>:<PORT>/v1
-VLLM_API_KEY=<MY_API_KEY>
-VLLM_MODEL=<MY_MODEL_NAME>
-```
+### 3. Frontend Setup (React + Vite)
+Open a **new terminal window**:
+\\\ash
+cd ai-debate-agent-vllm/frontend
 
-Verify connectivity (optional):
+# Install Node dependencies
+npm install
 
-```bash
-python test_vllm.py
-```
+# Start the Vite development server
+npm run dev
+\\\
 
-## Usage
+Navigate to \http://localhost:5173\ in your browser to start using the AI Debate Agent!
 
-### Running the Application
+---
 
-```bash
-python app.py
-```
+## 📂 Project Structure
 
-Open the local URL shown in the terminal (typically `http://127.0.0.1:7860`). Enter a debate topic, select the number of rounds (1 to 5), and click **Start Debate**.
+\\\	ext
+ai_debate_agent_vllm/
+├── main.py                 # FastAPI application and SSE streaming routes
+├── debate.py               # LangGraph multi-agent logic
+├── storage.py              # Local JSON history storage logic
+├── .env                    # LLM Configuration
+├── frontend/               # React + Vite application
+│   ├── src/
+│   │   ├── components/     # React UI Components (Sidebar, Transcript, Config, etc.)
+│   │   ├── services/       # Axios API client
+│   │   ├── types/          # TypeScript interfaces
+│   │   ├── App.tsx         # Main React shell and state logic
+│   │   └── index.css       # Tailwind directives & Custom Scrollbars
+│   ├── package.json
+│   └── tailwind.config.js
+\\\
 
-### Example Usage
-
-| Debate topic | Rounds | What you get |
-|--------------|--------|--------------|
-| Social media does more harm than good | 3 | Alternating For/Against arguments across 3 rounds, then a judge verdict with per-argument scores and a declared winner |
-| Remote work is better than working in an office | 2 | Two rounds of rebuttals, streamed transcript, and a scored breakdown (logic, evidence, persuasiveness) |
-| Artificial intelligence should be heavily regulated | 3 | Full debate transcript with live updates, total scores per debater, and written judge reasoning |
-| Space exploration is worth the cost | 2 | Concise two-round debate ending in a winner (Debater A, Debater B, or Tie) and comments per argument |
-
-**Typical output sections:**
-
-1. **Debate transcript** (markdown): each round labeled with Debater A (For) or Debater B (Against)
-2. **Judge's verdict**: score table, totals, winner, and short explanation
-
-## Project Structure
-
-```text
-ai_debate_agent/
-├── app.py              # Gradio UI and streaming debate handler
-├── debate.py           # LangGraph graph (Debater A, Debater B, Judge)
-├── test_vllm.py        # Smoke test for vLLM connectivity
-├── requirements.txt    # Python dependencies
-├── .env.example        # Environment variable template
-├── .gitignore
-├── README.md
-└── assets/
-    └── demo.png        # Demo screenshot for the README
-```
-
-## How It Works
-
-1. **Topic input**  
-   The user enters a topic and round count in Gradio. `debate_handler` in `app.py` calls `run_debate()` in `debate.py`.
-
-2. **Graph setup**  
-   LangGraph builds a stateful graph with shared `DebateState`: topic, `max_rounds`, `round_num`, `transcript`, and `verdict`. All three agents use one shared vLLM client initialized with `VLLM_BASE_URL`.
-
-3. **Debater A (For)**  
-   The first node calls the vLLM model with the topic and an empty transcript. The model returns the opening argument for the For side.
-
-4. **Debater B (Against)**  
-   The second node calls the vLLM model with the transcript including Debater A's latest turn. It returns the Against argument and increments `round_num`.
-
-5. **Round loop**  
-   A conditional edge checks `round_num <= max_rounds`. If more rounds remain, control returns to Debater A with the updated transcript. Each debater is prompted to rebut the opponent's most recent point. If rounds are complete, the graph routes to the judge.
-
-6. **Judge**  
-   The judge node sends the full transcript to the vLLM model with a structured JSON scoring prompt. Each argument receives scores (1 to 10) for logic, evidence, and persuasiveness. The app parses the response, recomputes totals, and sets the winner and verdict text.
-
-7. **Streaming to the UI**  
-   The graph runs with `stream_mode="values"`. After every node, `run_debate` yields the current state. Gradio renders the transcript and verdict panels incrementally until the debate completes.
-
-**Graph flow:**
-
-```text
-START -> debater_a -> debater_b -> (more rounds? -> debater_a : judge) -> END
-```
+---
+*Built for the future of multi-agent interactions.*
