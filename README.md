@@ -1,57 +1,82 @@
-﻿# 🤖 AI Debate Agent (v2.0)
+# 🤖 AI Debate Agent (v2.0)
 
 ![React](https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
 ![Vite](https://img.shields.io/badge/Vite-B73BFE?style=for-the-badge&logo=vite&logoColor=FFD62E)
 ![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/fastapi-109989?style=for-the-badge&logo=FASTAPI&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![LangGraph](https://img.shields.io/badge/LangGraph-000000?style=for-the-badge)
+![vLLM](https://img.shields.io/badge/vLLM-007FFF?style=for-the-badge)
 
 A multi-agent AI system where two large language models autonomously debate any topic you give them, while a third impartial AI judge evaluates their logic, evidence, and persuasiveness.
 
-Recently completely re-architected from a basic Gradio script into a **production-ready SaaS application** featuring a modern React frontend and a FastAPI backend with Real-Time Server-Sent Events (SSE) streaming.
+Recently completely re-architected into a **production-ready SaaS application** featuring a modern React frontend and a FastAPI backend with Real-Time Server-Sent Events (SSE) streaming.
 
 ---
 
-## ✨ Features
+## 🏗️ High-Level Architecture
 
-- **Multi-Agent Orchestration**: Powered by **LangGraph**, orchestrating three distinct agent personas (Debater A, Debater B, and the Judge).
-- **Real-Time SSE Streaming**: Watch the debate unfold live. FastAPI streams chunks directly from the vLLM engine to the React frontend with zero latency.
-- **Modern React + Tailwind UI**: A beautiful, responsive CSS Grid layout built with Vite, TypeScript, and Tailwind CSS.
-- **Rich Markdown Formatting**: Debate transcripts are rendered using eact-markdown and @tailwindcss/typography for flawless readability.
-- **Robust State Management**: View past debates in a locked-down 'View Only' mode, complete with hover-to-delete history management, just like modern AI products.
-- **Bring Your Own LLM**: Connects to any local or remote OpenAI-compatible endpoint (like vLLM, Ollama, or OpenAI).
+The system is separated into a strict Client-Server model.
 
----
-
-## 🏗️ Architecture
-
-The system is separated into a strict Client-Server model:
-
-1. **Frontend (Vite/React)**: Manages UI state, history sidebar, and parses the SSE stream using native etch and TextDecoder.
-2. **Backend (FastAPI)**: Serves a REST API for history management and a POST endpoint that executes the LangGraph workflow, bridging synchronous generator queues to asynchronous HTTP streams.
-3. **Orchestrator (LangGraph)**: Manages the cyclical graph state (DebateState), passing the context window back and forth between the debaters before handing it to the judge.
-4. **LLM Engine (vLLM)**: Executes the actual inference for the agents.
-
-### Agentic Workflow Diagram
-
-`mermaid
-sequenceDiagram
-    participant UI as React Frontend
-    participant API as FastAPI Backend
-    participant Orchestrator as LangGraph
-    participant Model as vLLM Endpoint
-
-    UI->>API: POST /api/debate/stream {topic, rounds}
-    API->>Orchestrator: Initialize DebateState
-    loop For Each Round
-        Orchestrator->>Model: Prompt (Position + Transcript)
-        Model-->>API: Stream Chunk (SSE)
-        API-->>UI: Render live text
+```mermaid
+graph TD
+    Client[React + Vite Frontend] <-->|HTTP / SSE Streaming| API[FastAPI Backend]
+    API <-->|State Updates| LangGraph[LangGraph Orchestrator]
+    
+    subgraph Agentic Pipeline
+        LangGraph -->|Turn 1| A[Debater A Node]
+        LangGraph -->|Turn 2| B[Debater B Node]
+        LangGraph -->|Final| Judge[Impartial Judge Node]
     end
-    Orchestrator->>Model: Prompt Judge (Full Transcript)
-    Model-->>API: Stream JSON Verdict
-    API-->>UI: Display Winner & Scores
-`
+    
+    A <-->|OpenAI API| vLLM[(vLLM Server)]
+    B <-->|OpenAI API| vLLM
+    Judge <-->|OpenAI API| vLLM
+    
+    API -->|Save History| Storage[(Local JSON Storage)]
+```
+
+---
+
+## 🧠 Core Technologies Deep Dive
+
+### 1. LangGraph Multi-Agent Orchestration
+We use **LangGraph** to model the debate as a cyclical graph. Instead of passing strings back and forth, LangGraph manages a strongly typed `DebateState` dictionary containing the topic, the maximum rounds, the current round number, and the growing transcript of arguments.
+
+**LangGraph Flow Diagram:**
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> DebaterA : Initialize State
+    
+    DebaterA --> DebaterB : Append Argument
+    
+    state if_continue <<choice>>
+    DebaterB --> if_continue : Append Argument
+    
+    if_continue --> DebaterA : round_num <= max_rounds
+    if_continue --> Judge : round_num > max_rounds
+    
+    Judge --> [*] : Append Verdict JSON
+```
+- **Context Preservation:** Each agent node only receives the `DebateState`. It then dynamically formats the transcript into its system prompt before querying the LLM, ensuring perfect context preservation across rebuttals.
+- **Dynamic Routing:** A conditional edge (`_route_after_b`) inspects the `round_num` in the state to determine whether to cycle back to Debater A or hand off to the Judge.
+
+### 2. vLLM (High-Throughput Inference)
+The application relies on **vLLM** hosted locally or remotely as the inference engine. 
+- **OpenAI-Compatible:** We use the standard `openai` Python SDK to communicate with vLLM, making it trivial to swap in OpenAI, Groq, or Ollama if desired.
+- **Streaming by Default:** The LLM responses are streamed chunk-by-chunk. These chunks are captured by a thread-safe Queue and immediately forwarded over the FastAPI SSE connection so the user sees the agents typing in real-time.
+
+### 3. FastAPI & Real-Time SSE
+The Python backend bridges LangGraph's synchronous graph execution to asynchronous HTTP streaming.
+- `POST /api/debate/stream`: Accepts the topic and rounds. It spawns the LangGraph execution in a background thread and yields `Server-Sent Events` (SSE) directly to the React frontend.
+- `GET /api/history` and `DELETE /api/history/{idx}`: Standard REST endpoints mapped to `storage.py` for persistent local state management.
+
+### 4. React + Tailwind CSS UI
+A completely custom-built Vite + React frontend replacing the old Gradio UI.
+- **CSS Grid Layout:** A responsive 68/32 split screen layout ensuring the transcript and judge panels fit mathematically perfectly on the screen.
+- **Rich Text Rendering:** Powered by `react-markdown` and `@tailwindcss/typography` to ensure bullet points, bolding, and italics generated by the LLM are rendered beautifully.
+- **Strict State Boundaries:** A "View Only" mode prevents modifying past debates, while a hover-to-delete Trash icon enables precise history management.
 
 ---
 
@@ -62,15 +87,15 @@ sequenceDiagram
 - Python (3.10+)
 - A running OpenAI-compatible API server (e.g., vLLM or Ollama).
 
-### 2. Backend Setup (FastAPI + LangGraph)
-\\\ash
+### 2. Backend Setup
+```bash
 # Clone the repository
 git clone https://github.com/Hetgandhi25/ai-debate-agent-vllm.git
 cd ai-debate-agent-vllm
 
 # Create a virtual environment
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+source venv/bin/activate  # On Windows: venv\Scriptsctivate
 
 # Install Python dependencies
 pip install -r requirements.txt
@@ -81,11 +106,11 @@ cp .env.example .env
 
 # Start the FastAPI server
 uvicorn main:app --reload
-\\\
+```
 
-### 3. Frontend Setup (React + Vite)
+### 3. Frontend Setup
 Open a **new terminal window**:
-\\\ash
+```bash
 cd ai-debate-agent-vllm/frontend
 
 # Install Node dependencies
@@ -93,30 +118,9 @@ npm install
 
 # Start the Vite development server
 npm run dev
-\\\
+```
 
-Navigate to \http://localhost:5173\ in your browser to start using the AI Debate Agent!
-
----
-
-## 📂 Project Structure
-
-\\\	ext
-ai_debate_agent_vllm/
-├── main.py                 # FastAPI application and SSE streaming routes
-├── debate.py               # LangGraph multi-agent logic
-├── storage.py              # Local JSON history storage logic
-├── .env                    # LLM Configuration
-├── frontend/               # React + Vite application
-│   ├── src/
-│   │   ├── components/     # React UI Components (Sidebar, Transcript, Config, etc.)
-│   │   ├── services/       # Axios API client
-│   │   ├── types/          # TypeScript interfaces
-│   │   ├── App.tsx         # Main React shell and state logic
-│   │   └── index.css       # Tailwind directives & Custom Scrollbars
-│   ├── package.json
-│   └── tailwind.config.js
-\\\
+Navigate to `http://localhost:5173` in your browser to start using the AI Debate Agent!
 
 ---
 *Built for the future of multi-agent interactions.*
