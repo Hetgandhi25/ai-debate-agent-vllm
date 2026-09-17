@@ -35,3 +35,21 @@ def save_session(topic: str, rounds: int, transcript: list, verdict: dict) -> di
         json.dump(sessions, f, indent=2, ensure_ascii=False)
         
     return session
+
+def clear_sessions() -> bool:
+    """Clear all saved debate sessions."""
+    try:
+        if os.path.exists(STORAGE_FILE):
+            os.remove(STORAGE_FILE)
+        return True
+    except Exception:
+        return False
+def delete_session(idx: int) -> bool:
+    """Delete a specific session by its index."""
+    sessions = load_sessions()
+    if 0 <= idx < len(sessions):
+        sessions.pop(idx)
+        with open(STORAGE_FILE, "w", encoding="utf-8") as f:
+            json.dump(sessions, f, indent=2, ensure_ascii=False)
+        return True
+    return False

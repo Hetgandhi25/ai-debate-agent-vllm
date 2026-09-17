@@ -41,20 +41,21 @@ CSS = r"""
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body {
-    height: 100%;
+    height: 100%; width: 100vw;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     background: #F5F7FC;
     -webkit-font-smoothing: antialiased;
-    overflow-x: hidden; /* Prevent 100vw horizontal scroll */
+    overflow-x: hidden !important; /* Force no horizontal scroll */
+    margin: 0; padding: 0;
 }
 
 /* ── Gradio Overrides ── */
 .gradio-container {
     font-family: 'Inter', sans-serif !important;
     background: #F5F7FC !important;
-    max-width: 100% !important;
-    width: 100% !important;
-    min-width: 100% !important;
+    max-width: 100vw !important;
+    width: 100vw !important;
+    min-width: 100vw !important;
     padding: 0 !important;
     margin: 0 !important;
     overflow-x: hidden !important;
@@ -63,24 +64,30 @@ html, body {
 .gradio-container > .main > .wrap {
     padding: 0 !important; margin: 0 !important;
     width: 100% !important; max-width: 100% !important; gap: 0 !important;
+    overflow-x: hidden !important;
 }
 footer { display: none !important; }
 
 /* ── App Shell ── */
 .app-shell {
     display: flex !important;
-    width: 100% !important;
+    flex-direction: row !important;
+    width: 100vw !important;
     min-height: 100vh !important;
     align-items: stretch !important;
     flex-wrap: nowrap !important;
     background: #F5F7FC !important;
+    margin: 0 !important; padding: 0 !important;
+    overflow-x: hidden !important;
 }
-.app-shell > .wrap {
+.app-shell > .wrap, .app-shell > div {
     display: flex !important;
+    flex-direction: row !important;
     width: 100% !important;
     align-items: stretch !important;
     flex-wrap: nowrap !important;
     gap: 0 !important;
+    margin: 0 !important; padding: 0 !important;
 }
 
 /* ── Sidebar ── */
@@ -152,12 +159,12 @@ footer { display: none !important; }
 
 /* ── Main Content ── */
 .main-content {
-    flex: 1 !important; min-width: 0 !important;
+    flex: 1 !important; min-width: 0 !important; width: calc(100vw - 280px) !important; max-width: calc(100vw - 280px) !important;
     padding: 32px 40px !important; background: #F5F7FC !important;
     display: flex !important; flex-direction: column !important;
-    overflow-y: auto !important; height: 100vh !important;
+    overflow-y: auto !important; overflow-x: hidden !important; height: 100vh !important;
 }
-.main-content > .wrap { display: flex !important; flex-direction: column !important; gap: 0 !important; }
+.main-content > .wrap { display: flex !important; flex-direction: column !important; gap: 0 !important; overflow-x: hidden !important; width: 100% !important; }
 
 .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; }
 .ph-title { font-size: 38px; font-weight: 800; color: #17213D; letter-spacing: -.6px; line-height: 1.05; }
@@ -169,7 +176,7 @@ footer { display: none !important; }
 .ph-user { display: flex; align-items: center; gap: 9px; background: #fff; border: 1px solid #E2E8F0; border-radius: 30px; padding: 4px 16px 4px 4px; font-size: 14px; font-weight: 600; color: #17213D; }
 .ph-user-av { width: 32px; height: 32px; background: linear-gradient(135deg, #8B5CF6, #6C4DFF); color: #fff; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 13px; font-weight: 700; }
 
-/* ── Control Card (CSS GRID) ── */
+/* ── Control Card (Fixed Proportions) ── */
 .ctrl-card {
     display: flex !important;
     flex-wrap: nowrap !important;
@@ -180,17 +187,26 @@ footer { display: none !important; }
     padding: 24px 32px !important; margin-bottom: 24px !important;
     width: 100% !important; overflow: visible !important;
 }
-/* flex-grow ratios (45/25/30) behave like fr units, applied at the correct
-   DOM level — .ctrl-card's direct children ARE the column divs themselves,
-   so grid/flex rules must live on .ctrl-card, never on its children. */
-.ctrl-col-topic  { flex: 45 1 0% !important; min-width: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important; background: transparent !important; }
-.ctrl-col-rounds { flex: 25 1 0% !important; min-width: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important; background: transparent !important; }
-.ctrl-col-start  { flex: 30 1 0% !important; min-width: 0 !important; margin: 0 !important; padding: 0 !important; border: none !important; background: transparent !important; }
+/* If Gradio inserts a wrapper, make the wrapper flex too */
+.ctrl-card > .wrap, .ctrl-card > div {
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    gap: 32px !important;
+    align-items: end !important;
+    width: 100% !important;
+    overflow: visible !important;
+}
+
+/* Hardcoded percentages so Gradio min-widths cannot expand them */
+.ctrl-col-topic  { width: 45% !important; min-width: 0 !important; flex: none !important; margin: 0 !important; padding: 0 !important; border: none !important; background: transparent !important; }
+.ctrl-col-rounds { width: 25% !important; min-width: 0 !important; flex: none !important; margin: 0 !important; padding: 0 !important; border: none !important; background: transparent !important; }
+.ctrl-col-start  { width: 30% !important; min-width: 0 !important; flex: none !important; margin: 0 !important; padding: 0 !important; border: none !important; background: transparent !important; }
 
 .ctrl-label { font-size: 14px; font-weight: 650; color: #17213D; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
 
-/* Topic Input */
-.ctrl-col-topic label { margin: 0 !important; padding: 0 !important; width: 100% !important; display: block !important; }
+/* Topic Input - fix the black border issue by stripping internal Gradio backgrounds */
+.ctrl-col-topic label { margin: 0 !important; padding: 0 !important; width: 100% !important; display: block !important; background: transparent !important;}
+.ctrl-col-topic .container { background: transparent !important; border: none !important; box-shadow: none !important; border-radius: 0 !important; }
 .ctrl-col-topic textarea,
 .ctrl-col-topic input {
     background: #fff !important; border: 1.5px solid #E2E8F0 !important;
@@ -205,6 +221,7 @@ footer { display: none !important; }
 .ctrl-char-count { text-align: right; font-size: 11px; color: #94A3B8; margin-top: 8px; }
 
 /* Round Radio */
+.ctrl-col-rounds * { overflow: visible !important; } /* Stop internal radio scrollbars */
 .round-radio { margin: 0 !important; padding: 0 !important; width: 100% !important; border: none !important; background: transparent !important; }
 .round-radio .wrap { display: flex !important; gap: 8px !important; flex-wrap: nowrap !important; align-items: center !important; }
 .round-radio label {
@@ -235,23 +252,25 @@ footer { display: none !important; }
 .start-btn button:hover { transform: translateY(-1px) !important; }
 .start-hint { text-align: center; font-size: 12px; color: #94A3B8; margin-top: 10px; font-weight: 500; }
 
-/* ── Content Grid (CSS GRID) ── */
+/* ── Content Grid (Fixed Proportions) ── */
 .content-row {
     display: flex !important; flex-wrap: nowrap !important; gap: 24px !important;
     align-items: start !important; width: 100% !important;
     margin: 0 !important; padding: 0 !important; border: none !important; background: transparent !important;
 }
-/* Same fix as .ctrl-card above: layout lives on the row (.content-row)
-   itself, and each panel gets a flex-grow ratio (68/32) instead of the
-   panels being turned into grids internally. */
+.content-row > .wrap, .content-row > div {
+    display: flex !important; flex-wrap: nowrap !important; gap: 24px !important;
+    align-items: start !important; width: 100% !important;
+}
 .tx-panel, .rs-panel {
     background: #fff !important; border: 1px solid #E2E8F0 !important;
     border-radius: 16px !important; box-shadow: 0 2px 12px rgba(0,0,0,.03) !important;
     padding: 24px !important; display: flex !important; flex-direction: column !important;
     min-height: 400px !important; margin: 0 !important; min-width: 0 !important;
+    overflow-x: hidden !important;
 }
-.tx-panel { flex: 68 1 0% !important; }
-.rs-panel { flex: 32 1 0% !important; }
+.tx-panel { width: 68% !important; min-width: 0 !important; flex: none !important; }
+.rs-panel { width: 32% !important; min-width: 0 !important; flex: none !important; }
 
 /* Panel Headers */
 .panel-hdr-container {
@@ -259,11 +278,7 @@ footer { display: none !important; }
     padding-bottom: 16px !important; border-bottom: 1px solid #E2E8F0 !important;
     margin-bottom: 20px !important; width: 100% !important; height: 52px !important;
 }
-/* NOTE: no ">div" catchall here — panel-hdr-container's own two real
-   children (the title block and the actions row) already space-between
-   correctly; forcing display rules onto arbitrary descendants breaks the
-   inner layout (same class of bug as .ctrl-card/.content-row above). */
-.panel-title { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 700; color: #17213D; margin: 0 !important; }
+.panel-title { display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 700; color: #17213D; margin: 0 !important; min-width: max-content; }
 .badge-live { background: #DCFCE7; color: #15803D; font-size: 12px; font-weight: 700; padding: 4px 12px; border-radius: 20px; }
 .badge-done { background: #DCFCE7; color: #15803D; font-size: 12px; font-weight: 700; padding: 4px 12px; border-radius: 20px; }
 
@@ -288,10 +303,10 @@ footer { display: none !important; }
 .msg-av { width: 44px; height: 44px; border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 17px; font-weight: 700; color: #fff; flex-shrink: 0; }
 .av-a { background: #4F7FFF; }
 .av-b { background: #E11D68; }
-.msg-bub { flex: 1; min-width: 0; padding: 16px 20px; border-radius: 12px; }
+.msg-bub { flex: 1; min-width: 0; padding: 16px 20px; border-radius: 12px; overflow-wrap: break-word; }
 .bub-a { background: #EFF6FF; border: 1px solid #DBEAFE; }
 .bub-b { background: #FFF1F3; border: 1px solid #FFE4E9; }
-.msg-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.msg-meta { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; flex-wrap: wrap; gap: 8px; }
 .msg-name { font-size: 15px; font-weight: 700; color: #17213D; }
 .msg-rnd { display: inline-block; font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 20px; margin-left: 12px; }
 .rnd-a { background: #DBEAFE; color: #1D4ED8; }
